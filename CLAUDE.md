@@ -99,6 +99,34 @@ User-facing R6 classes providing idiomatic R interface:
 
 The package ships a Quarto extension (`inst/quarto-ext/slcr/`) and registers a knitr engine (`R/engine.R`) that runs `{slc}` code chunks.
 
+### Required document setup
+
+Every Quarto document using `{slc}` chunks needs **both** of the following — omitting either is a common source of silent failures:
+
+1. **`engine: knitr`** in the YAML front matter. Without it Quarto selects the Jupyter engine and the `slc` knitr engine is never registered — chunks appear as literal fenced-code text in the output.
+
+2. **A hidden R setup chunk that loads slcR.** This fires `.onLoad`, which calls `knitr::knit_engines$set(slc = slc_engine)`. Without it knitr emits `Warning: Unknown language engine 'slc'` and skips all SLC chunks.
+
+Minimal correct document header:
+
+```yaml
+---
+title: "My Report"
+format:
+  html:
+    code-fold: false
+filters:
+  - slcr
+engine: knitr
+---
+```
+
+````
+```{r setup, include=FALSE}
+library(slcR)
+```
+````
+
 ### Engine chunk options
 
 | Option | Default | Description |
@@ -110,7 +138,7 @@ The package ships a Quarto extension (`inst/quarto-ext/slcr/`) and registers a k
 | `output_data` | — | Comma-separated SLC dataset name(s) to pull back into R |
 | `show_listing` | `TRUE` | Show SAS listing (LST) output below the log (only used when no HTML table output is produced) |
 | `output_files` | — | Override: comma-separated paths to embed. Usually not needed — figures are auto-discovered |
-| `fig-cap` | — | Caption(s) for figures. Single string applied to all; list/vector assigns one per figure |
+| `fig-cap` | — | Caption(s) for figures. Single string applied to all; list/vector assigns one per figure. **Must be set via `#\|` inside the chunk body — never in the inline header** (see below) |
 
 ### Shared session (default behaviour)
 
@@ -145,7 +173,8 @@ Figures are **auto-discovered** — no `output_files` is needed. The engine scan
 The standard pattern for figure chunks:
 
 ````
-```{slc fig-cap="Class scatter plot"}
+```{slc label="my-figure"}
+#| fig.cap: "My figure caption"
 ods html body='' gpath="&slcr_gpath" style=htmlblue;
 ods graphics / width=700px height=500px;
 proc sgplot data=sashelp.class;
@@ -154,6 +183,8 @@ run;
 ods html close;
 ```
 ````
+
+**Important:** `fig-cap` must always be specified as a `#|` YAML option inside the chunk body, never in the inline chunk header (e.g. `` ```{slc fig-cap="..."} ``). knitr parses inline options with `alist()`, which treats the hyphen in `fig-cap` as a minus operator and throws a parse error. `fig.cap` (with a dot) also works as the `#|` key and is equivalent.
 
 `&slcr_gpath` is set as a SAS macro variable by the engine before each chunk runs (pointing to a per-chunk temp directory) so user code can reference it. In practice SLC ignores it for image placement, but including it is harmless and documents intent.
 

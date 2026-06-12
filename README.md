@@ -43,15 +43,33 @@ Install the Quarto extension into your project once:
 slcR::install_slc_extension()
 ```
 
-Add the filter to your document YAML front matter:
+Every Quarto document that uses `{slc}` chunks needs three things:
+
+**1. `engine: knitr` in the YAML front matter** — without this Quarto defaults to Jupyter and the `slc` engine is never registered:
 
 ``` yaml
 ---
 title: "My SAS Analysis"
+format:
+  html:
+    code-fold: false
 filters:
   - slcr
+engine: knitr
 ---
 ```
+
+**2. A hidden R setup chunk that loads slcR** — this fires `.onLoad`, which registers the knitr engine:
+
+```` markdown
+```{r setup, include=FALSE}
+library(slcR)
+```
+````
+
+**3. The extension installed** (once per project, see above).
+
+Without `engine: knitr`, Quarto renders the document with Jupyter and `{slc}` chunks appear as literal text. Without `library(slcR)`, knitr reports `Warning: Unknown language engine 'slc'` and skips all SLC chunks.
 
 ### Running SAS code
 
@@ -118,7 +136,8 @@ run;
 Figures are **auto-discovered** — ODS graphics are embedded automatically. The engine scans `NOTE: Successfully written image ...` lines from the SAS log (scoped to the current chunk's new log lines only) and resolves paths against the SLC WORK directory:
 
 ```` markdown
-```{slc fig-cap="Height vs Weight"}
+```{slc label="my-figure"}
+#| fig.cap: "Height vs Weight"
 ods html body='' gpath="&slcr_gpath" style=htmlblue;
 ods graphics / width=700px height=500px;
 proc sgplot data=sashelp.class;
@@ -127,6 +146,8 @@ run;
 ods html close;
 ```
 ````
+
+**Always use `#|` for captions — never the inline header.** Writing `` ```{slc fig-cap="..."} `` causes a parse error because knitr's `alist()` parser treats the hyphen in `fig-cap` as a minus operator. Use `#| fig.cap:` inside the chunk body instead (with a dot or as shown above).
 
 `&slcr_gpath` is a per-chunk SAS macro variable set by the engine. Note that SLC always writes images to its WORK temp directory regardless of `gpath=`; the engine resolves those paths automatically.
 
