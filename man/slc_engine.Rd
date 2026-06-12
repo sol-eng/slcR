@@ -12,6 +12,9 @@ slc_engine(options)
 \item{code}{Character vector containing the SLC code to execute}
 \item{input_data}{Name(s) of R data.frame(s) to make available in SLC. Can be a single name or comma-separated names (optional)}
 \item{output_data}{Name(s) for capturing SLC output data into R. Can be a single name or comma-separated names (optional)}
+\item{new_session}{Whether to start a fresh SLC process for this chunk (default: FALSE). Set to TRUE for an isolated session that does not share state with other chunks.}
+\item{show_listing}{Whether to include SAS listing (LST) output below the log (default: TRUE)}
+\item{output_files}{Path(s) to files written by SLC code (e.g. PNG images). Can be a single path or comma-separated paths (optional)}
 \item{eval}{Whether to evaluate the code (default: TRUE)}
 \item{echo}{Whether to show the code (default: TRUE)}
 \item{include}{Whether to include output (default: TRUE)}
@@ -38,6 +41,7 @@ Multiple datasets can be specified using comma-separated names:
 \itemize{
 \item \code{input_data="df1,df2,df3"} - transfers multiple R data.frames to SLC
 \item \code{output_data="result1,result2"} - captures multiple datasets from SLC to R
+\item \code{output_files="plot.png,report.png"} - embeds multiple output files inline
 }
 }
 \section{Global Environment Assignment}{

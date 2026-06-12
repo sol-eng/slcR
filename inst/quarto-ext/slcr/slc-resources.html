@@ -21,7 +21,7 @@
         background-color: #f5f5f5 !important;
     }
 
-    /* Collapsible SLC output styling */
+    /* Collapsible SLC output styling (log) */
     .slc-output-collapsible {
         border: 1px solid #ddd;
         border-radius: 6px;
@@ -51,6 +51,39 @@
         margin: 0;
         padding: 15px;
         background-color: #f8f9fa;
+        border-radius: 0 0 6px 6px;
+    }
+
+    /* Collapsible SLC listing output styling */
+    .slc-listing-collapsible {
+        border: 1px solid #c5d8f5;
+        border-radius: 6px;
+        margin: 10px 0;
+        background-color: #f5f9ff;
+    }
+
+    .slc-listing-collapsible summary {
+        background-color: #e8f0fe;
+        padding: 10px 15px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 0.9em;
+        border-bottom: 1px solid #c5d8f5;
+        user-select: none;
+    }
+
+    .slc-listing-collapsible summary:hover {
+        background-color: #d2e3fc;
+    }
+
+    .slc-listing-collapsible[open] summary {
+        border-bottom: 1px solid #c5d8f5;
+    }
+
+    .slc-listing-collapsible pre {
+        margin: 0;
+        padding: 15px;
+        background-color: #f8fbff;
         border-radius: 0 0 6px 6px;
     }
 
@@ -116,22 +149,53 @@
                             sourceDiv.style.backgroundColor = '#f5f5f5';
                         }
 
-                        // Make outputs collapsible
+                        // Make outputs collapsible, splitting log and listing
                         const output = cell.querySelector('.cell-output');
                         if (output && !output.querySelector('details')) {
-                            const details = document.createElement('details');
-                            const summary = document.createElement('summary');
-
-                            details.className = 'slc-output-collapsible';
-                            summary.textContent = '📊 SLC Output';
-                            details.open = false; // Collapsed by default
-
                             const outputContent = output.innerHTML;
+                            const listingStart = '&lt;!-- slc-listing-start --&gt;';
+                            const listingEnd = '&lt;!-- slc-listing-end --&gt;';
+                            const startIdx = outputContent.indexOf(listingStart);
+                            const endIdx = outputContent.indexOf(listingEnd);
+
                             output.innerHTML = '';
 
-                            details.appendChild(summary);
-                            details.innerHTML += outputContent;
-                            output.appendChild(details);
+                            if (startIdx !== -1 && endIdx !== -1) {
+                                // Log block (everything before the sentinel)
+                                const logContent = outputContent.substring(0, startIdx);
+                                const logDetails = document.createElement('details');
+                                const logSummary = document.createElement('summary');
+                                logDetails.className = 'slc-output-collapsible';
+                                logSummary.textContent = '📊 SLC Output';
+                                logDetails.open = false;
+                                logDetails.appendChild(logSummary);
+                                logDetails.innerHTML += logContent;
+                                output.appendChild(logDetails);
+
+                                // Listing block (content between sentinels)
+                                const listingContent = outputContent.substring(
+                                    startIdx + listingStart.length,
+                                    endIdx
+                                );
+                                const lstDetails = document.createElement('details');
+                                const lstSummary = document.createElement('summary');
+                                lstDetails.className = 'slc-listing-collapsible';
+                                lstSummary.textContent = '📋 SLC Listing';
+                                lstDetails.open = false;
+                                lstDetails.appendChild(lstSummary);
+                                lstDetails.innerHTML += listingContent;
+                                output.appendChild(lstDetails);
+                            } else {
+                                // No listing — single log block
+                                const details = document.createElement('details');
+                                const summary = document.createElement('summary');
+                                details.className = 'slc-output-collapsible';
+                                summary.textContent = '📊 SLC Output';
+                                details.open = false;
+                                details.appendChild(summary);
+                                details.innerHTML += outputContent;
+                                output.appendChild(details);
+                            }
                         }
                     }
                 });
