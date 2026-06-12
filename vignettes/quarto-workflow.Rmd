@@ -365,7 +365,42 @@ run;
 ```
 ````
 
-### 4. Reproducibility
+### 4. ODS Graphics — Route Figures Through `&slcr_gpath`
+
+When producing plots with `PROC SGPLOT`, `PROC SGPANEL`, or any ODS graphics procedure, route output through the `&slcr_gpath` macro variable. slcR creates this per-chunk temp directory automatically and scans it after each chunk — figures written there are captured and embedded without accumulating files in your working directory:
+
+````{verbatim}
+```{slc fig-cap="Sales by Region"}
+ods html body='' gpath="&slcr_gpath" style=htmlblue;
+proc sgplot data=work.sales_data;
+  vbar region / response=sales stat=mean;
+  yaxis label="Average Sales ($)";
+  title "Average Sales by Region";
+run;
+ods html close;
+```
+````
+
+Without `gpath="&slcr_gpath"`, SLC writes figures to the document's working directory under generic names (`SGPLOT.png`, `SGPLOT1.png`, etc.). These files persist between renders and can cause stale images to appear on re-render. The `&slcr_gpath` pattern avoids this entirely.
+
+You can add `fig-cap` as either a single string (shared by all figures in the chunk) or a YAML list (one caption per figure):
+
+````{verbatim}
+```{slc fig-cap:
+  - "Sway speed by visit"
+  - "Ellipse area by visit"}
+ods html body='' gpath="&slcr_gpath" style=htmlblue;
+proc sgplot data=work.sway;
+  vbox speed / category=visit;
+run;
+proc sgplot data=work.sway;
+  vbox area / category=visit;
+run;
+ods html close;
+```
+````
+
+### 5. Reproducibility
 
 Set up your environment for reproducibility:
 

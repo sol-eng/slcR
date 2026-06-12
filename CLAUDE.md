@@ -109,7 +109,8 @@ The package ships a Quarto extension (`inst/quarto-ext/slcr/`) and registers a k
 | `input_data` | — | Comma-separated R data frame name(s) to transfer into SLC |
 | `output_data` | — | Comma-separated SLC dataset name(s) to pull back into R |
 | `show_listing` | `TRUE` | Show SAS listing (LST) output below the log |
-| `output_files` | — | Comma-separated paths to files written by SLC (e.g. PNG images) |
+| `output_files` | — | Override: comma-separated paths to embed. Usually not needed — figures are auto-discovered |
+| `fig-cap` | — | Caption(s) for figures. Single string applied to all; list/vector assigns one per figure |
 
 ### Shared session (default behaviour)
 
@@ -129,17 +130,52 @@ Before each chunk submission the engine calls `connection$clear_listing_output()
 
 ### How image output works
 
-Set `output_files` to a comma-separated list of file paths that the SLC code will have written (e.g. via `ODS PDF` / `ODS HTML` graphics). After execution the engine copies each file into knitr's figure directory and emits figure-include markup via `knitr::knit_hooks$get("plot")`, which handles both HTML and non-HTML output formats.
+Figures are **auto-discovered** — no `output_files` is needed in most cases. The engine uses two complementary mechanisms after each chunk:
 
+1. **Log parsing**: scans the SAS log for `NOTE: Successfully written image <path>` lines. This captures any figure regardless of the ODS destination.
+2. **`&slcr_gpath` scan**: before running user code the engine sets the SAS macro variable `&slcr_gpath` to a per-chunk temp directory. Any image files placed there (e.g. via `ods html gpath="&slcr_gpath"`) are collected after execution.
+
+Both sets of paths are merged, deduplicated, copied into knitr's figure directory, and emitted as pandoc figure markdown (`![caption](path)`).
+
+A basic chart with no special ODS options just works:
+
+````
+```{slc fig-cap="Class scatter plot"}
+proc sgplot data=sashelp.class;
+  scatter x=height y=weight;
+run;
 ```
-```{slc output_files="myplot.png"}
-ods html body='myplot.png' style=htmlblue;
+````
+
+#### Recommended: route figures through `&slcr_gpath`
+
+For reliable, reproducible figure capture — especially in documents that are rendered more than once or contain multiple plot-producing chunks — route ODS output through `&slcr_gpath`. This is a per-chunk temp directory managed by slcR; figures written there are captured cleanly without accumulating files in the working directory or risking stale images from previous renders:
+
+````
+```{slc fig-cap="Class scatter plot"}
+ods html body='' gpath="&slcr_gpath" style=htmlblue;
 proc sgplot data=sashelp.class;
   scatter x=height y=weight;
 run;
 ods html close;
 ```
+````
+
+Without `gpath="&slcr_gpath"`, SLC writes figures (e.g. `SGPLOT.png`, `SGPLOT1.png`) to the working directory and they persist between renders, which can cause a stale figure from a previous run to appear if the code path changes.
+
+Use `output_files` only when auto-discovery misses a file written to a fully custom path outside `&slcr_gpath`:
+
+````
+```{slc output_files="/custom/path/myplot.png"}
+ods html body='/custom/path/myplot.png';
+proc sgplot data=sashelp.class;
+  scatter x=height y=weight;
+run;
+ods html close;
 ```
+````
+
+`embed_output_files()` is retained as a backward-compatible shim but is deprecated; it now delegates to `render_slc_figures()` internally.
 
 ### Extension installation
 

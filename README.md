@@ -102,11 +102,39 @@ run;
 
 ### Image output
 
-For graphics written to disk by SLC code (e.g. via ODS), pass the file path(s) with `output_files` and they will be embedded inline:
+Figures are **auto-discovered** — ODS graphics are embedded automatically without any special chunk options:
 
 ```` markdown
-```{slc output_files="myplot.png"}
-ods html body='myplot.png' style=htmlblue;
+```{slc fig-cap="Height vs Weight"}
+proc sgplot data=sashelp.class;
+  scatter x=height y=weight;
+run;
+```
+````
+
+The engine parses `NOTE: Successfully written image ...` lines from the SAS log and also scans the `&slcr_gpath` macro variable (a per-chunk temp directory) for new image files. Both sources are merged and rendered as inline figures.
+
+#### Recommended: route figures through `&slcr_gpath`
+
+For reliable, reproducible figure capture — especially in documents that are rendered more than once or contain multiple plot-producing chunks — route ODS output through `&slcr_gpath`. This is a per-chunk temp directory managed by slcR; figures written there are captured cleanly without accumulating files in your working directory or risking stale images from previous renders:
+
+```` markdown
+```{slc fig-cap="Height vs Weight"}
+ods html body='' gpath="&slcr_gpath" style=htmlblue;
+proc sgplot data=sashelp.class;
+  scatter x=height y=weight;
+run;
+ods html close;
+```
+````
+
+Without `gpath="&slcr_gpath"`, SLC writes figures (e.g. `SGPLOT.png`, `SGPLOT1.png`) to your working directory and they persist between renders, which can cause a stale figure from a previous run to appear if the code path changes.
+
+Use `output_files` only when auto-discovery misses a file written to a fully custom path outside `&slcr_gpath`:
+
+```` markdown
+```{slc output_files="/custom/path/myplot.png"}
+ods html body='/custom/path/myplot.png';
 proc sgplot data=sashelp.class;
   scatter x=height y=weight;
 run;

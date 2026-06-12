@@ -10,18 +10,28 @@ slc_engine(options)
 \item{options}{A list of chunk options from knitr, including:
 \describe{
 \item{code}{Character vector containing the SLC code to execute}
-\item{input_data}{Name(s) of R data.frame(s) to make available in SLC. Can be a single name or comma-separated names (optional)}
-\item{output_data}{Name(s) for capturing SLC output data into R. Can be a single name or comma-separated names (optional)}
-\item{new_session}{Whether to start a fresh SLC process for this chunk (default: FALSE). Set to TRUE for an isolated session that does not share state with other chunks.}
-\item{show_listing}{Whether to include SAS listing (LST) output below the log (default: TRUE)}
-\item{output_files}{Path(s) to files written by SLC code (e.g. PNG images). Can be a single path or comma-separated paths (optional)}
+\item{input_data}{Name(s) of R data.frame(s) to make available in SLC. Can be a
+single name or comma-separated names (optional)}
+\item{output_data}{Name(s) for capturing SLC output data into R. Can be a single
+name or comma-separated names (optional)}
+\item{new_session}{Whether to start a fresh SLC process for this chunk
+(default: FALSE). Set to TRUE for an isolated session that does not share
+state with other chunks.}
+\item{show_listing}{Whether to include SAS listing (LST) output below the log
+(default: TRUE)}
+\item{output_files}{Override: comma-separated paths to embed as figures. Usually
+not needed — figures are auto-discovered via log parsing and the
+\code{&slcr_gpath} temp directory.}
+\item{fig-cap}{Caption(s) for auto-discovered or \code{output_files} figures. A single
+string is applied to all figures; a vector/list assigns one caption per figure.}
 \item{eval}{Whether to evaluate the code (default: TRUE)}
 \item{echo}{Whether to show the code (default: TRUE)}
 \item{include}{Whether to include output (default: TRUE)}
 }}
 }
 \value{
-A knitr engine output object containing the code and results
+A knitr engine output object containing the code and results, followed
+by any figure markdown.
 }
 \description{
 Provides support for executing SLC code blocks in Quarto documents.
@@ -30,52 +40,45 @@ This function is automatically called by knitr when processing SLC code chunks.
 \details{
 This function handles the execution of SLC code within Quarto documents by:
 \itemize{
-\item Initializing SLC connection if needed
-\item Transferring input data from R to SLC if specified
+\item Initializing SLC connection if needed (shared by default, or fresh if
+\code{new_session = TRUE})
+\item Exposing \code{&slcr_gpath} — a per-chunk temp directory — as a SAS macro
+variable, so user code can write figures to a known location
 \item Executing the SLC code
-\item Capturing output and logs
+\item Capturing output, log, and listing
+\item Auto-discovering figures via two complementary mechanisms:
+(1) parsing \code{NOTE: Successfully written image <path>} from the SAS log,
+(2) scanning \code{&slcr_gpath} for new image files
 \item Transferring output data from SLC to R if specified
 }
+}
+
+\section{ODS GRAPHICS figure capture}{
+
+Two auto-discovery mechanisms work together — no \code{output_files} needed in most cases:
+\enumerate{
+\item \strong{Log parsing}: after each chunk the engine scans the SAS log for
+\code{NOTE: Successfully written image ...} lines. This captures figures
+regardless of where ODS writes them.
+\item \strong{slcr_gpath scan}: figures written to \code{&slcr_gpath} (a
+per-chunk temp directory) are also collected. Use with
+\code{ods html gpath="&slcr_gpath"} for explicit placement.
+}
+}
+
+\section{Multiple datasets}{
 
 Multiple datasets can be specified using comma-separated names:
 \itemize{
 \item \code{input_data="df1,df2,df3"} - transfers multiple R data.frames to SLC
 \item \code{output_data="result1,result2"} - captures multiple datasets from SLC to R
-\item \code{output_files="plot.png,report.png"} - embeds multiple output files inline
+\item \code{output_files="a.png,b.png"} - embeds additional files not auto-discovered
 }
 }
+
 \section{Global Environment Assignment}{
 
 When \code{output_data} is specified, this function intentionally assigns
-the resulting dataset(s) to the global environment using \code{assign(..., envir = knitr::knit_global())}.
-This is the expected behavior to make SLC output data available for subsequent
-R code chunks in the same Quarto document.
-}
-
-\examples{
-\dontrun{
-# This function is typically called automatically by knitr
-# when processing SLC code chunks in Quarto documents
-
-# Example chunk options that would be passed:
-options <- list(
-  code = c("data test;", "  x = 1;", "run;"),
-  input_data = "mtcars",
-  output_data = "results",
-  eval = TRUE,
-  echo = TRUE
-)
-
-# Multiple datasets example:
-options <- list(
-  code = c("data combined;", "  set df1 df2;", "run;"),
-  input_data = "df1,df2",
-  output_data = "combined,summary",
-  eval = TRUE,
-  echo = TRUE
-)
-
-# The engine would be called like this:
-# slc_engine(options)
-}
+the resulting dataset(s) to the global environment using
+\code{assign(..., envir = knitr::knit_global())}.
 }
