@@ -76,10 +76,11 @@ slc_engine <- function(options) {
     stop("options must be a list")
   }
 
-  code            <- paste(options$code, collapse = "\n")
-  output          <- character(0)
-  connection      <- NULL
-  discovered_imgs <- character(0)
+  code              <- paste(options$code, collapse = "\n")
+  output            <- character(0)
+  connection        <- NULL
+  discovered_imgs   <- character(0)
+  html_table_output <- NULL
 
   # Skip execution if eval is FALSE
   if (isFALSE(options$eval)) {
@@ -94,7 +95,8 @@ slc_engine <- function(options) {
       } else {
         connection <- get_shared_connection()
       }
-      work_lib <- connection$get_library("WORK")
+      work_lib  <- connection$get_library("WORK")
+      slc_work  <- get_slc_work_path(connection)
 
       # Handle input data if specified
       input_names <- parse_multiple_names(options$input_data)
@@ -131,7 +133,32 @@ slc_engine <- function(options) {
         # Clear stale listing from any prior chunk before submitting user code
         connection$clear_listing_output()
 
-        result     <- connection$submit(code)
+        # Record the current log length so we can isolate only this chunk's new lines
+        log_before <- as.character(connection$get_log())
+        log_lines_before <- length(strsplit(log_before, "\n", fixed = TRUE)[[1]])
+
+        # Open ODS TAGSETS.HTMLCSS only when user code does not manage its own
+        # ODS HTML destination (figure chunks use "ods html ... gpath=..." which
+        # conflicts with a simultaneously-open tagsets.htmlcss and suppresses
+        # figure output to gpath).
+        use_ods_tagset <- !grepl("ods\\s+html\\b", code, ignore.case = TRUE)
+        ods_html_file  <- NULL
+        ods_open_stmt  <- NULL
+        if (use_ods_tagset) {
+          ods_html_file <- tempfile(fileext = ".html")
+          ods_open_stmt <- sprintf(
+            "ods tagsets.htmlcss file='%s';",
+            gsub("\\\\", "/", ods_html_file)
+          )
+          connection$submit(ods_open_stmt)
+        }
+
+        result <- connection$submit(code)
+
+        if (use_ods_tagset) {
+          connection$submit("ods tagsets.htmlcss close;")
+        }
+
         log_output <- connection$get_log()
         output <- if (is.list(log_output) && "log" %in% names(log_output)) {
           log_output$log
@@ -139,9 +166,27 @@ slc_engine <- function(options) {
           as.character(log_output)
         }
 
+        # Strip engine-injected ODS setup/teardown lines from the displayed log.
+        if (use_ods_tagset) {
+          output <- filter_engine_log_lines(output, ods_open_stmt,
+                                            "ods tagsets.htmlcss close;")
+        }
+
+        # Read ODS TAGSETS.HTMLCSS output when present.
+        # Only use it if the body contains actual table elements (i.e., this chunk
+        # produced tabular output). For figure-only chunks the body will be empty.
+        if (!is.null(ods_html_file) && file.exists(ods_html_file)) {
+          raw_html  <- paste(readLines(ods_html_file, warn = FALSE), collapse = "\n")
+          body_html <- extract_ods_html_body(raw_html)
+          if (nzchar(trimws(body_html)) && grepl("<[Tt][Aa][Bb][Ll][Ee]", body_html)) {
+            html_table_output <- body_html
+          }
+          unlink(ods_html_file)
+        }
+
         # Append listing output when non-empty and not suppressed
         show_listing <- !isFALSE(options$show_listing)
-        if (show_listing) {
+        if (show_listing && is.null(html_table_output)) {
           listing <- as.character(connection$get_listing_output())
           if (nzchar(listing)) {
             output <- paste0(
@@ -153,14 +198,20 @@ slc_engine <- function(options) {
           }
         }
 
-        # -- Auto-discover figures via two complementary mechanisms --
+        # Discover figures: scan only the NEW log lines produced by this chunk,
+        # then resolve relative image paths against the SLC WORK directory.
+        log_all_lines <- strsplit(output, "\n", fixed = TRUE)[[1]]
+        new_log_lines <- if (log_lines_before < length(log_all_lines))
+          log_all_lines[(log_lines_before + 1L):length(log_all_lines)]
+        else
+          character(0)
+        new_log_text <- paste(new_log_lines, collapse = "\n")
+        log_imgs <- resolve_slc_image_paths(
+          extract_image_paths_from_log(new_log_text),
+          slc_work
+        )
 
-        # (1) Parse "NOTE: Successfully written image <path>" from the SAS log.
-        #     This captures any figure regardless of which ODS destination wrote it.
-        log_imgs <- extract_image_paths_from_log(output)
-
-        # (2) Scan &slcr_gpath for images placed there by user code that used
-        #     ods html gpath="&slcr_gpath" or similar.
+        # Also scan &slcr_gpath for any images placed there by user code.
         imgs_after_dir <- list_image_files(chunk_img_dir)
         dir_imgs       <- setdiff(imgs_after_dir, imgs_before_dir)
 
@@ -189,7 +240,25 @@ slc_engine <- function(options) {
   text_out <- knitr::engine_output(options, code, output)
   fig_out  <- render_slc_figures(all_img_paths, options)
 
-  c(text_out, fig_out)
+  # Emit ODS HTML table output as a raw HTML block outside the <pre> verbatim
+  # block so pandoc renders actual formatted tables rather than plain text.
+  # Pandoc passes raw HTML through unchanged in HTML output mode.
+  html_out <- if (!is.null(html_table_output)) {
+    paste0(
+      "\n\n```{=html}\n",
+      "<details class=\"slc-table-collapsible\" open>\n",
+      "<summary>&#x1F4CB; SLC Table Output</summary>\n",
+      "<div class=\"slc-table-output\">\n",
+      html_table_output,
+      "\n</div>\n",
+      "</details>\n",
+      "```\n"
+    )
+  } else {
+    NULL
+  }
+
+  c(text_out, html_out, fig_out)
 }
 
 
@@ -298,7 +367,7 @@ render_slc_figures <- function(paths, options) {
   }
 
   # Resolve figure captions: single string applied to all, or one per figure
-  raw_caps <- options[["fig-cap"]]
+  raw_caps <- options[["fig-cap"]] %||% options[["fig.cap"]]
   caps <- if (is.null(raw_caps)) {
     rep("", length(dests))
   } else {
@@ -351,6 +420,91 @@ parse_multiple_names <- function(names_string) {
 embed_output_files <- function(options) {
   paths <- parse_multiple_names(options$output_files)
   render_slc_figures(paths, options)
+}
+
+
+#' Extract the content of the <body> element from an ODS HTML file
+#'
+#' Returns everything inside the \code{<body>} tag, stripping the outer element
+#' itself.  Falls back to the full file if no body element is found.
+#'
+#' @param html Character scalar containing raw ODS HTML.
+#' @return Character scalar of body content, or empty string.
+#' @keywords internal
+#' Get the SLC WORK library filesystem path (cached per connection)
+#' @keywords internal
+get_slc_work_path <- function(connection) {
+  cached <- .slcr_env$slc_work_path
+  if (!is.null(cached)) return(cached)
+  tryCatch({
+    connection$submit("%put SLCR_WORK: %sysfunc(getoption(work));")
+    log <- as.character(connection$get_log())
+    m <- regmatches(log, regexpr("SLCR_WORK:\\s*(\\S+)", log, perl = TRUE))
+    if (length(m) > 0) {
+      path <- trimws(sub("SLCR_WORK:\\s*", "", m))
+      .slcr_env$slc_work_path <- path
+      return(path)
+    }
+  }, error = function(e) NULL)
+  NULL
+}
+
+
+#' Resolve image paths from SAS log against the SLC WORK directory
+#'
+#' SLC writes ODS images to paths relative to its WORK temp directory
+#' (e.g. \code{ODS LISTING images/I0000001.png}).  This function resolves
+#' such relative paths to absolute filesystem paths.
+#'
+#' @param paths Character vector of paths as returned by \code{extract_image_paths_from_log}.
+#' @param slc_work Absolute path to the SLC WORK directory, or NULL.
+#' @return Character vector of absolute paths for files that exist.
+#' @keywords internal
+resolve_slc_image_paths <- function(paths, slc_work) {
+  if (length(paths) == 0) return(character(0))
+  result <- character(0)
+  for (p in paths) {
+    if (file.exists(p)) {
+      result <- c(result, p)
+    } else if (!is.null(slc_work)) {
+      abs_p <- file.path(slc_work, p)
+      if (file.exists(abs_p)) result <- c(result, abs_p)
+    }
+  }
+  result
+}
+
+
+filter_engine_log_lines <- function(log_text, ods_open_stmt, ods_close_stmt) {
+  if (!nzchar(log_text)) return(log_text)
+  lines <- strsplit(log_text, "\n", fixed = TRUE)[[1]]
+
+  # Patterns for lines that are purely engine-internal and should be hidden
+  skip_patterns <- c(
+    "ods tagsets\\.htmlcss",                      # ODS open/close statements
+    "Writing TAGSETS\\.HTMLCSS",                  # NOTE about writing file
+    "Failed to resolve style",                    # WARNING about unknown style
+    "%let slcr_gpath="                            # per-chunk gpath macro setup
+  )
+  skip_re <- paste(skip_patterns, collapse = "|")
+
+  keep <- !grepl(skip_re, lines, ignore.case = TRUE)
+  paste(lines[keep], collapse = "\n")
+}
+
+
+extract_ods_html_body <- function(html) {
+  if (!nzchar(html)) return("")
+
+  # Extract content between <BODY ...> and </BODY> (SLC ODS uses uppercase tags)
+  body_m <- regmatches(html, regexpr("(?si)<body[^>]*>(.*)</body>", html, perl = TRUE))
+  if (length(body_m) == 0 || !nzchar(body_m)) return("")
+  inner <- sub("(?i)^<body[^>]*>", "", body_m, perl = TRUE)
+  inner <- sub("(?i)</body>\\s*$", "", inner, perl = TRUE)
+  inner <- trimws(inner)
+  if (!nzchar(inner)) return("")
+
+  paste0("<div class=\"slc-ods-output\">\n", inner, "\n</div>")
 }
 
 

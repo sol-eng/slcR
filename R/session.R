@@ -43,5 +43,9 @@ shutdown_shared_connection <- function() {
     tryCatch(conn$shutdown(), error = function(e) NULL)
     rm("connection", envir = .slcr_env)
   }
+  # Clear cached WORK path so it's re-queried for the next render
+  if (exists("slc_work_path", envir = .slcr_env, inherits = FALSE)) {
+    rm("slc_work_path", envir = .slcr_env)
+  }
   invisible(NULL)
 }
