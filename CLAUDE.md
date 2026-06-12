@@ -108,7 +108,7 @@ The package ships a Quarto extension (`inst/quarto-ext/slcr/`) and registers a k
 | `new_session` | `FALSE` | Start a fresh isolated SLC process for this chunk; `FALSE` reuses the shared session |
 | `input_data` | — | Comma-separated R data frame name(s) to transfer into SLC |
 | `output_data` | — | Comma-separated SLC dataset name(s) to pull back into R |
-| `show_listing` | `TRUE` | Show SAS listing (LST) output below the log |
+| `show_listing` | `TRUE` | Show SAS listing (LST) output below the log (only used when no HTML table output is produced) |
 | `output_files` | — | Override: comma-separated paths to embed. Usually not needed — figures are auto-discovered |
 | `fig-cap` | — | Caption(s) for figures. Single string applied to all; list/vector assigns one per figure |
 
@@ -124,36 +124,30 @@ knitr::opts_chunk$set(new_session = TRUE)
 
 The internal helpers `get_shared_connection()` and `shutdown_shared_connection()` in `R/session.R` manage the cached `Slc` object stored in `.slcr_env` (defined in `R/zzz.R`).
 
+### How table output works
+
+Before running user code the engine opens an `ods tagsets.htmlcss` destination to a temp file. After execution it closes the destination and reads the file. If the body contains `<TABLE>` elements the content is emitted as a raw HTML block wrapped in a green collapsible `<details class="slc-table-collapsible">` ("📋 SLC Table Output"), open by default. This happens automatically for any chunk that contains tabular procedures (`proc print`, `proc tabulate`, `proc means`, etc.) — no chunk option is needed.
+
+The engine skips opening `ods tagsets.htmlcss` for chunks that already contain `ods html` in their code (i.e. figure chunks), because two simultaneous ODS HTML-family destinations conflict.
+
+**Note:** `ods html` (standard) produces a JS-driven shell with an empty `<BODY>` in SLC and is not suitable for embedding tables. `ods tagsets.htmlcss` writes real static HTML table markup and is used instead.
+
 ### How listing output works
 
-Before each chunk submission the engine calls `connection$clear_listing_output()` to avoid stale pages carrying over from a prior chunk. After executing, `connection$get_listing_output()` is called. When the result is non-empty and `show_listing` is not `FALSE`, the listing text is appended to the output wrapped in HTML sentinel comments (`<!-- slc-listing-start -->` / `<!-- slc-listing-end -->`). The bundled JavaScript in `slc-resources.html` detects those sentinels and renders the listing in a separate blue-tinted collapsible block ("📋 SLC Listing") distinct from the grey log block ("📊 SLC Output").
+Plain-text listing output (from `connection$get_listing_output()`) is used as a fallback when no HTML table output was produced by the chunk — i.e. it applies to chunks that neither produced tabular ODS output nor managed their own ODS HTML destination. When non-empty and `show_listing` is not `FALSE`, the text is appended wrapped in HTML sentinel comments (`<!-- slc-listing-start -->` / `<!-- slc-listing-end -->`). The JavaScript in `slc-resources.html` detects those sentinels and renders the listing in a separate blue-tinted collapsible block ("📋 SLC Listing").
 
 ### How image output works
 
-Figures are **auto-discovered** — no `output_files` is needed in most cases. The engine uses two complementary mechanisms after each chunk:
+Figures are **auto-discovered** — no `output_files` is needed. The engine scans only log lines produced by the current chunk (using a before/after line-count diff on the cumulative session log) for `NOTE: Successfully written image <path>` lines.
 
-1. **Log parsing**: scans the SAS log for `NOTE: Successfully written image <path>` lines. This captures any figure regardless of the ODS destination.
-2. **`&slcr_gpath` scan**: before running user code the engine sets the SAS macro variable `&slcr_gpath` to a per-chunk temp directory. Any image files placed there (e.g. via `ods html gpath="&slcr_gpath"`) are collected after execution.
+**SLC-specific behavior:** SLC's `ods html gpath=` parameter is silently ignored; images are always written to `<WORK>/ODS LISTING images/Ixxxxxxx.png` regardless. The engine queries the SLC WORK path via `%sysfunc(getoption(work))` once per session (cached in `.slcr_env$slc_work_path`) and resolves relative log paths against it.
 
-Both sets of paths are merged, deduplicated, copied into knitr's figure directory, and emitted as pandoc figure markdown (`![caption](path)`).
-
-A basic chart with no special ODS options just works:
-
-````
-```{slc fig-cap="Class scatter plot"}
-proc sgplot data=sashelp.class;
-  scatter x=height y=weight;
-run;
-```
-````
-
-#### Recommended: route figures through `&slcr_gpath`
-
-For reliable, reproducible figure capture — especially in documents that are rendered more than once or contain multiple plot-producing chunks — route ODS output through `&slcr_gpath`. This is a per-chunk temp directory managed by slcR; figures written there are captured cleanly without accumulating files in the working directory or risking stale images from previous renders:
+The standard pattern for figure chunks:
 
 ````
 ```{slc fig-cap="Class scatter plot"}
 ods html body='' gpath="&slcr_gpath" style=htmlblue;
+ods graphics / width=700px height=500px;
 proc sgplot data=sashelp.class;
   scatter x=height y=weight;
 run;
@@ -161,9 +155,9 @@ ods html close;
 ```
 ````
 
-Without `gpath="&slcr_gpath"`, SLC writes figures (e.g. `SGPLOT.png`, `SGPLOT1.png`) to the working directory and they persist between renders, which can cause a stale figure from a previous run to appear if the code path changes.
+`&slcr_gpath` is set as a SAS macro variable by the engine before each chunk runs (pointing to a per-chunk temp directory) so user code can reference it. In practice SLC ignores it for image placement, but including it is harmless and documents intent.
 
-Use `output_files` only when auto-discovery misses a file written to a fully custom path outside `&slcr_gpath`:
+Use `output_files` only when auto-discovery misses a file at a fully custom path:
 
 ````
 ```{slc output_files="/custom/path/myplot.png"}

@@ -89,9 +89,22 @@ run;
 
 The shared process is shut down automatically when the document finishes rendering. To run a specific chunk in an isolated process (one that cannot see state from other chunks), set `new_session = TRUE` on that chunk.
 
+### Table output
+
+Tabular procedures (`proc print`, `proc tabulate`, `proc means`, etc.) automatically produce formatted HTML tables — no special chunk options needed. The output appears in a green collapsible "📋 SLC Table Output" block, open by default:
+
+```` markdown
+```{slc}
+proc print data=work.summary noobs;
+run;
+```
+````
+
+The engine uses `ods tagsets.htmlcss` internally to capture static HTML table markup. This is skipped for figure chunks (those containing `ods html`) to avoid destination conflicts.
+
 ### Listing output
 
-When SAS procedures produce listing output (PROC PRINT, PROC MEANS, etc.) it appears automatically in a separate blue-tinted "📋 SLC Listing" block. Suppress it with `show_listing=FALSE`:
+Plain-text listing output is shown as a fallback when a chunk produces no HTML table output. Suppress it with `show_listing=FALSE`:
 
 ```` markdown
 ```{slc show_listing=FALSE}
@@ -102,25 +115,12 @@ run;
 
 ### Image output
 
-Figures are **auto-discovered** — ODS graphics are embedded automatically without any special chunk options:
-
-```` markdown
-```{slc fig-cap="Height vs Weight"}
-proc sgplot data=sashelp.class;
-  scatter x=height y=weight;
-run;
-```
-````
-
-The engine parses `NOTE: Successfully written image ...` lines from the SAS log and also scans the `&slcr_gpath` macro variable (a per-chunk temp directory) for new image files. Both sources are merged and rendered as inline figures.
-
-#### Recommended: route figures through `&slcr_gpath`
-
-For reliable, reproducible figure capture — especially in documents that are rendered more than once or contain multiple plot-producing chunks — route ODS output through `&slcr_gpath`. This is a per-chunk temp directory managed by slcR; figures written there are captured cleanly without accumulating files in your working directory or risking stale images from previous renders:
+Figures are **auto-discovered** — ODS graphics are embedded automatically. The engine scans `NOTE: Successfully written image ...` lines from the SAS log (scoped to the current chunk's new log lines only) and resolves paths against the SLC WORK directory:
 
 ```` markdown
 ```{slc fig-cap="Height vs Weight"}
 ods html body='' gpath="&slcr_gpath" style=htmlblue;
+ods graphics / width=700px height=500px;
 proc sgplot data=sashelp.class;
   scatter x=height y=weight;
 run;
@@ -128,9 +128,9 @@ ods html close;
 ```
 ````
 
-Without `gpath="&slcr_gpath"`, SLC writes figures (e.g. `SGPLOT.png`, `SGPLOT1.png`) to your working directory and they persist between renders, which can cause a stale figure from a previous run to appear if the code path changes.
+`&slcr_gpath` is a per-chunk SAS macro variable set by the engine. Note that SLC always writes images to its WORK temp directory regardless of `gpath=`; the engine resolves those paths automatically.
 
-Use `output_files` only when auto-discovery misses a file written to a fully custom path outside `&slcr_gpath`:
+Use `output_files` only when auto-discovery misses a file at a fully custom path:
 
 ```` markdown
 ```{slc output_files="/custom/path/myplot.png"}
