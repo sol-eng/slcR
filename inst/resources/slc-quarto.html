@@ -81,6 +81,70 @@
     border-radius: 0 0 6px 6px;
   }
 
+  /* Collapsible SLC table output styling */
+  .slc-table-collapsible {
+    border: 1px solid #b8d4b8;
+    border-radius: 6px;
+    margin: 10px 0;
+    background-color: #f5fff5;
+  }
+
+  .slc-table-collapsible summary {
+    background-color: #e0f0e0;
+    padding: 10px 15px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9em;
+    border-bottom: 1px solid #b8d4b8;
+    user-select: none;
+  }
+
+  .slc-table-collapsible summary:hover {
+    background-color: #c8e6c8;
+  }
+
+  .slc-table-collapsible[open] summary {
+    border-bottom: 1px solid #b8d4b8;
+  }
+
+  .slc-table-output {
+    padding: 10px 15px;
+    overflow-x: auto;
+  }
+
+  /* ODS TAGSETS.HTMLCSS table styling */
+  .slc-ods-output {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.9em;
+    overflow-x: auto;
+  }
+
+  .slc-ods-output table {
+    border-collapse: collapse;
+    margin: 4px auto;
+  }
+
+  .slc-ods-output th,
+  .slc-ods-output td {
+    border: 1px solid #b0b0b0;
+    padding: 3pt 6pt;
+    text-align: left;
+  }
+
+  .slc-ods-output th {
+    background-color: #003366;
+    color: #ffffff;
+    font-weight: bold;
+  }
+
+  .slc-ods-output tr:nth-child(even) td {
+    background-color: #e8f0f8;
+  }
+
+  .slc-ods-output .SysTitleAndFooterContainer {
+    display: none;
+  }
+
   /* SAS syntax highlighting for SLC chunks */
   .cell[data-engine="slc"] .sourceCode .kw,
   .cell[data-engine="slc"] .sourceCode .cf {
@@ -113,16 +177,17 @@
       let foundSlcCells = false;
 
       allCells.forEach(function (cell) {
-        const cellHtml = cell.innerHTML;
+        // Detect SLC cells via the engine attribute Quarto sets — reliable
+        // across all chunk types without keyword-scanning the code text.
+        const isSlcCell = cell.matches('[data-engine="slc"]') ||
+          cell.querySelector('[data-engine="slc"]') !== null ||
+          cell.querySelector('code.slc') !== null ||
+          cell.querySelector('pre.slc') !== null;
 
-        // Apply grey background to SLC code chunks
-        if (cellHtml.includes('{slc') ||
-          cell.querySelector('[data-engine="slc"]') ||
-          cellHtml.includes('data _null_') ||
-          cellHtml.includes('proc print') ||
-          cellHtml.includes('run;')) {
+        if (isSlcCell) {
+          foundSlcCells = true;
 
-          // Find all code blocks in this cell
+          // Apply grey background to code blocks in this cell
           const codeBlocks = cell.querySelectorAll('pre.sourceCode');
           codeBlocks.forEach(function (block) {
             block.style.backgroundColor = '#f5f5f5';
@@ -133,19 +198,6 @@
           if (sourceDiv) {
             sourceDiv.style.backgroundColor = '#f5f5f5';
           }
-        }
-
-        const isSlcCell = cellHtml.includes('data _null_') ||
-          cellHtml.includes('proc print') ||
-          cellHtml.includes('data want') ||
-          cellHtml.includes('datalines;') ||
-          cellHtml.includes('input column') ||
-          cellHtml.includes('run;') ||
-          cell.querySelector('[data-engine="slc"]') ||
-          cellHtml.includes('{slc');
-
-        if (isSlcCell) {
-          foundSlcCells = true;
           const output = cell.querySelector('.cell-output');
           if (output && !output.querySelector('details')) {
             const outputContent = output.innerHTML;
