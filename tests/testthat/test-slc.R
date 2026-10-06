@@ -31,3 +31,13 @@ test_that("Binary path detection works", {
 
   slc$shutdown()
 })
+test_that("System options are applied to the session", {
+  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+              "SLC not installed")
+
+  slc <- Slc$new(list(XCMD = "NO"))
+  on.exit(slc$shutdown())
+
+  slc$submit("%put XCMD is %sysfunc(getoption(XCMD));")
+  expect_match(slc$get_log(), "XCMD is NOXCMD", fixed = TRUE)
+})
