@@ -92,12 +92,9 @@ Slc <- R6::R6Class(
 
       # Build command line arguments - use -namedpipe flag
       # This tells SLC to create its own pipes and report their names
+      # System options are not passed here: wpslinks rejects them on its
+      # command line, so they go to the session as it initialises instead.
       args <- c("-namedpipe")
-
-      # Add system options
-      for (name in names(sys_options)) {
-        args <- c(args, sprintf("-%s", name), sys_options[[name]])
-      }
 
       # Start process with stdout piped so we can read pipe names
       private$process_handle <- processx::process$new(
