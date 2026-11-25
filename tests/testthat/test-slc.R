@@ -1,6 +1,6 @@
 test_that("Slc class can be instantiated", {
   # Skip if SLC is not installed
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
@@ -10,7 +10,7 @@ test_that("Slc class can be instantiated", {
 
 test_that("Binary path detection works", {
   # Skip if SLC is not installed
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
@@ -32,7 +32,7 @@ test_that("Binary path detection works", {
   slc$shutdown()
 })
 test_that("System options are applied to the session", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new(list(XCMD = "NO"))

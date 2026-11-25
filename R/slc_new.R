@@ -202,7 +202,7 @@ Slc <- R6::R6Class(
 
       search_paths <- self$get_binary_search_paths()
       for (path in search_paths) {
-        if (dir.exists(path)) {
+        if (file.exists(file.path(path, self$get_binary_name()))) {
           return(path)
         }
       }
@@ -223,11 +223,7 @@ Slc <- R6::R6Class(
     #' @description Get binary search paths
     #' @return Character vector of paths
     get_binary_search_paths = function() {
-      c(
-        "/opt/altair/slc/2026/bin",
-        "/opt/wps/bin",
-        "C:/Program Files/Altair/SLC/2026/bin"
-      )
+      slc_binary_search_paths()
     },
 
     #' @description Get binary name
@@ -346,3 +342,32 @@ Slc <- R6::R6Class(
     }
   )
 )
+
+#' Candidate SLC binary directories, newest version first
+#'
+#' Scans each install root for version-named subdirectories (e.g. `2026`,
+#' `2027`, `2026.1`) and returns their `bin` folders ordered from the most
+#' recent version to the oldest, followed by the legacy `/opt/wps/bin`.
+#'
+#' @param roots Character vector of install roots containing per-version
+#'   subdirectories.
+#' @return Character vector of candidate binary directories.
+#' @keywords internal
+#' @noRd
+slc_binary_search_paths <- function(
+  roots = c("/opt/altair/slc", "C:/Program Files/Altair/SLC")
+) {
+  versioned <- unlist(lapply(roots, function(root) {
+    if (!dir.exists(root)) {
+      return(character(0))
+    }
+    versions <- list.files(root, pattern = "^[0-9]{4}(\\.[0-9]+)*$")
+    if (length(versions) == 0) {
+      return(character(0))
+    }
+    versions <- versions[order(numeric_version(versions), decreasing = TRUE)]
+    file.path(root, versions, "bin")
+  }))
+
+  c(versioned, "/opt/wps/bin")
+}
