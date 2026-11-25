@@ -2,7 +2,7 @@
 # Pure-R unit tests run everywhere; SLC integration tests are skipped when
 # the SLC binary is absent.
 
-slc_available <- file.exists("/opt/altair/slc/2026/bin/wpslinks")
+slc_available <- slc_is_installed()
 
 # ---------------------------------------------------------------------------
 # extract_image_paths_from_log() unit tests

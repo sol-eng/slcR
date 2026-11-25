@@ -1,5 +1,5 @@
 test_that("Slc connection can submit and execute code", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
@@ -18,7 +18,7 @@ test_that("Slc connection can submit and execute code", {
 })
 
 test_that("Slc can get and set macro variables", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
@@ -34,7 +34,7 @@ test_that("Slc can get and set macro variables", {
 })
 
 test_that("Slc can work with libraries", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
@@ -54,7 +54,7 @@ test_that("Slc can work with libraries", {
 })
 
 test_that("Slc can get listing output", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
@@ -72,7 +72,7 @@ test_that("Slc can get listing output", {
 })
 
 test_that("Slc handles errors gracefully", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
@@ -91,7 +91,7 @@ test_that("Slc handles errors gracefully", {
 })
 
 test_that("Multiple Slc connections can coexist", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc1 <- Slc$new()
@@ -109,7 +109,7 @@ test_that("Multiple Slc connections can coexist", {
 })
 
 test_that("Slc can submit code from file", {
-  skip_if_not(file.exists("/opt/altair/slc/2026/bin/wpslinks"),
+  skip_if_not(slc_is_installed(),
               "SLC not installed")
 
   slc <- Slc$new()
